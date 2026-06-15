@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cartservice
+  labels:
+    app: cartservice
+spec:
+  selector:
+    matchLabels:
+      app: cartservice
+  template:
+    metadata:
+      labels:
+        app: cartservice
+      annotations:
+        instrumentation.opentelemetry.io/inject-sdk: "true"
+        instrumentation.opentelemetry.io/inject-into-containers: "server"
+        # instrumentation.opentelemetry.io/inject-dotnet: "true"
+        # instrumentation.opentelemetry.io/otel-dotnet-auto-runtime: "linux-arm64" # not supported in otel operator
+    spec:
+      serviceAccountName: cartservice
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      nodeSelector:
+        node: workloads
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: edgarrth/demo-cartservice:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 7070
+        env:
+        - name: REDIS_ADDR
+          value: "redis-cart:6379"
+        - name: ENABLE_TRACING
+          value: "1"
+        - name: ENABLE_METRICS
+          value: "1"
+        - name: ENABLE_LOGS
+          value: "1"
+        
+        resources:
+          requests:
+            cpu: 200m
+            memory: 64Mi
+          limits:
+            cpu: 1
+            memory: 1Gi
+        readinessProbe:
+          initialDelaySeconds: 15
+          grpc:
+            port: 7070
+        livenessProbe:
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          grpc:
+            port: 7070
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cartservice
+  labels:
+    app: cartservice
+spec:
+  type: ClusterIP
+  selector:
+    app: cartservice
+  ports:
+  - name: grpc
+    port: 7070
+    targetPort: 7070
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cartservice

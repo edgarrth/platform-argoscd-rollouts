@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice
+  labels:
+    app: adservice
+spec:
+  selector:
+    matchLabels:
+      app: adservice
+  template:
+    metadata:
+      labels:
+        app: adservice
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
+        instrumentation.opentelemetry.io/inject-into-containers: "server"
+    spec:
+      serviceAccountName: adservice
+      terminationGracePeriodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      nodeSelector:
+        node: workloads
+      containers:
+      - name: server
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        image: edgarrth/adservice:v0.10.5
+        ports:
+        - containerPort: 9555
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: PORT
+          value: "9555"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Djava.io.tmpdir=/tmp"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 180Mi
+          limits:
+            cpu: 2
+            memory: 1Gi
+        readinessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          grpc:
+            port: 9555
+        livenessProbe:
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          grpc:
+            port: 9555
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice
+  labels:
+    app: adservice
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adservice
